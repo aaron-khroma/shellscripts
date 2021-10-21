@@ -69,22 +69,41 @@ function phlim() {
     else
       for FILEPATH in "$@"
       do
-        if [ "$FILEPATH" != "$1" ]
+        if [ "$FILEPATH" != "$1" ] # Exclude first argument (limit)
         then
           if [[ -f "$FILEPATH" ]]
           then
+            if (($TBYTES != 0))
+            then
+              # Recompress the image so we can see how large it truly is at its dimensions
+              magick mogrify -quality 80 $FILEPATH
+            fi
             INFO=`magick identify $FILEPATH`
             # ./gallery/body/mommy-makeover/01/01.jpg JPEG 800x533 800x533+0+0 8-bit sRGB 62538B 0.000u 0:00.000
             # [0]                                     [1]  [2]     [3]         [4]   [5]  [6]    [7]    [8]
             IFS=' '
+            echo "$INFO"
             ARRAY=( $INFO )
             unset IFS
-            echo "Analyzing the file ${ARRAY[0]}"
             WIDTH=${ARRAY[2]%x*}
-            echo " - This image is $WIDTH pixels wide."
             HEIGHT=${ARRAY[2]#*x}
-            echo " - This image is $HEIGHT pixels tall."
-            BYTES=${ARRAY[6]%B}
+            RAWBYTES=${ARRAY[6]%B}
+            unset BYTEFLOAT
+            KIBI=${RAWBYTES%Ki}
+            MEBI=${RAWBYTES%Mi}
+            if ((${#RAWBYTES} > ${#KIBI})) # Catch cases where filesize is larger than a Kibibyte
+            then
+              BYTEFLOAT=`echo "$KIBI * 1024" | bc`
+            elif ((${#RAWBYTES} > ${#MEBI})) # Catch cases where filesize is larger than a Mebibyte
+            then
+              BYTEFLOAT=`echo "$MEBI * 1048576" | bc`
+            fi
+            if [ -z $BYTEFLOAT ]
+            then
+              BYTES=$RAWBYTES
+            else
+              BYTES=${BYTEFLOAT%.*}
+            fi
             echo " - This image is $BYTES bytes in size."
 
             if [ $TBYTES -eq "0" ]
@@ -102,11 +121,13 @@ function phlim() {
               if (($BYTES > $TBYTES))
               then
                 echo "The filesize exceeds the limit, I'm scaling the photo down."
-                # Fudging the numbers here because Bash doesn't do floating point math
+                # Have to do something hacky here because Bash doesn't do floating point math
                 RATIO=.$(expr ${TBYTES}000 / $BYTES)
-                # This ratio is for filesizes (which are proportional to area)
-                # To scale a linear dimension with the ratio, we need to take its square root first
-                NEWWIDTH=`echo "sqrt($RATIO) * $WIDTH" | bc`
+                # However this ratio is for filesizes, which are proportional to area and therefore a square unit.
+                # To scale a linear dimension with the ratio, we need to take its square root first.
+                # NEWWIDTH=`echo "sqrt($RATIO) * $WIDTH" | bc`
+                # Nevermind, for some reason that makes the images too small? Let's just use the ratio plain...
+                NEWWIDTH=`echo "(1 - $RATIO) * $WIDTH" | bc`
                 # Chop off the decimal places and scale to this width
                 magick mogrify -resize ${NEWWIDTH%.*}x10000 -quality 80 $FILEPATH
               fi
