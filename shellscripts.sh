@@ -30,7 +30,6 @@ function aplrm() {
       else
         echo "Very well then, exiting now."
       fi
-      exit 0
     fi
   fi
 }
