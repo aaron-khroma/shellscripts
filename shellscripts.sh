@@ -8,7 +8,7 @@ function aplrm() {
   then
     echo "Provide a repo name to remove Apple files from."
   else
-    REPO_PATH="~/$1"
+    REPO_PATH="/Users/Scotty/Git/$1"
     if ! test -d $REPO_PATH  # ...check if the directory exists.
     then 
       echo "The specified repo does not exist."
